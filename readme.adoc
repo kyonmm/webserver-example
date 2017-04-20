@@ -1,3 +1,22 @@
-== nginx
+= 環境構築
+. Hyper-Vを使えるようにする
+. Windows Dockerの環境を準備する
+. pecoを使えるようにする
+. gitを使えるようにする
 
+== nginx
+利用するテンプレート
+
+----
 git@github.com:nginxinc/docker-nginx.git
+----
+
+=== そのまま動かしてみる
+----
+cd .\nginx\stable\alpine\
+docker build -t kyonmm/nginx .
+docker run -p 8081:80 -d kyonmm/nginx
+docker ps
+wget http://localhost:8081
+docker ps -a | peco | % {($_ -split "\s+")[0]} | %{ docker rm -f $_ }
+----
