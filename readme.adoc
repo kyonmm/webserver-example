@@ -1,17 +1,25 @@
 = 環境構築
+
+.必須
 . Hyper-Vを使えるようにする
 . Windows Dockerの環境を準備する
-. pecoを使えるようにする
 . gitを使えるようにする
 
+.読み替えが必要だけどなくてもできるツール
+. pecoを使えるようにする
+. PowerShell
+
+
 == nginx
-利用するテンプレート
+
+利用するDockerのテンプレート
 
 ----
 git@github.com:nginxinc/docker-nginx.git
 ----
 
 === そのまま動かしてみる
+
 ----
 cd .\nginx\stable\alpine\
 docker build -t kyonmm/nginx .
@@ -20,3 +28,57 @@ docker ps
 wget http://localhost:8081
 docker ps -a | peco | % {($_ -split "\s+")[0]} | %{ docker rm -f $_ }
 ----
+
+=== コンテナデプロイ時にカスタマイズして動かしてみる
+
+Nginx自体は環境変数によるインジェクションをサポートしていない。
+
+動的な設定をする場合には主に次の3つの方法がある。
+
+. envsubst + docker-compose でデプロイ時に設定ファイルを動的に生成する。(なんでも設定できる。オーバーヘッドなし。)
+. ngx_http_perl_module を利用する(httpコンテキスト内のみでリクエストハンドリング毎？にperlが実行される)
+. ngx_lua を利用する(server, server if, location, location ifコンテキスト内のみでリクエストハンドリング毎？にluaが実行される)
+
+手段が複雑になるenvsubstを紹介する。
+
+.全体の手順
+. default.confのテンプレートファイルとしてdefault.conf.templateを用意する
+.. 利用した環境変数を${HOGE}みたいに値をパラメータ化しておく
+. docker-compose.ymlを用意する
+.. 1のファイルをNginxコンテナにマウントする
+.. 環境変数を定義する
+.. envsubstを利用してdefault.conf(Nginxの設定ファイル)を生成する
+
+.実行コマンド
+----
+cd .\nginx-custom\stable\alpine\
+docker build -t kyonmm/nginx-dynamic-custom:0.1 .
+docker-compose up -d
+docker ps
+wget http://localhost:8081
+docker ps -a | peco | % {($_ -split "\s+")[0]} | %{ docker rm -f $_ }
+----
+
+.docker-composeファイル
+[source,yaml]
+----
+include::nginx-custom/stable/alpine/docker-compose.yml[]
+----
+<1> envsubstを利用してテンプレートファイルに環境変数を注入して新しいファイルとしてコンテナ内の設定ファイルを上書きし、nginxを起動する。
+
+==== 参考
+. http://qiita.com/minamijoyo/items/63ae57b99d4a4c5d7987
+. https://heartbeats.jp/hbblog/2014/07/3-tips-for-nginx-on-docker.html
+
+=== 性能比較
+
+. worker_processes をautoにするとスケールアウトする(cpu数がいいところであろう)
+. worker_connections をあげるとスケールアウトする(65535が限界だとおもうが、そんなにいるのだろうか)
+. open_file_cache を設定するとスケールアップする(静的コンテンツのみかもしれないが。ファイルディスクリプタの情報をキャッシュしておく設定のようなので)
+. accept_mutex_delay を小さくするとスケールアップする(どれくらいがいいのかは、実機によるとしか)
+
+==== 参考
+
+. https://gist.github.com/koudaiii/386eb55a29b1adc19c5e
+. http://qiita.com/cubicdaiya/items/2763ba2240476ab1d9dd
+. http://qiita.com/cubicdaiya/items/235777dc401ec419b14e
